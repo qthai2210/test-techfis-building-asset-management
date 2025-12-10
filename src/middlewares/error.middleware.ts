@@ -2,6 +2,15 @@ import { Request, Response, NextFunction } from 'express';
 import { HttpException, ResponseCodes } from '../utils/exception';
 import { errorLogger } from '../utils/loggers/error.logger';
 import { config } from '../config';
+// Helper function to redact sensitive data
+const sanitizeBody = (body: any) => {
+  if (!body) return body;
+  const sanitized = { ...body };
+  if ('password' in sanitized) sanitized.password = '[REDACTED]';
+  if ('refreshToken' in sanitized) sanitized.refreshToken = '[REDACTED]';
+  // Add any other sensitive fields you want to redact
+  return sanitized;
+};
 
 /**
  * Global Error Handling Middleware
@@ -23,7 +32,7 @@ export const errorMiddleware = (error: Error, req: Request, res: Response, next:
       method: req.method,
       ip: req.ip,
       stack: error.stack,
-      body: req.body,
+      body: sanitizeBody(req.body),
       query: req.query,
       params: req.params,
     });
