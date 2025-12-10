@@ -1,0 +1,304 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// --- ENUMS ---
+// Gender types for employees
+enum Gender {
+  MALE     // Male
+  FEMALE   // Female
+  OTHER    // Other
+}
+
+// Employee employment status
+enum EmployeeStatus {
+  active     // Currently employed
+  inactive   // Temporarily inactive
+  resigned   // Has resigned
+}
+
+// User roles in the system
+enum AccountRole {
+  user    // Regular user
+  admin   // System administrator
+  manager // Department manager
+}
+
+// Asset operational status
+enum AssetStatus {
+  active              // In active use
+  inactive            // Not in use
+  disposed            // Disposed/Written off
+  under_maintenance   // Currently under maintenance
+}
+
+// Types of maintenance/service activities
+enum MaintenanceType {
+  repair        // Repair work
+  maintenance   // Preventive maintenance
+  inspection    // Inspection/audit
+}
+
+// Types of asset history actions
+enum ActionType {
+  created      // Asset created
+  assigned     // Assigned to employee
+  transferred  // Transferred between employees
+  repaired     // Underwent repair
+  disposed     // Disposed of
+}
+
+// Building location types
+enum LocationType {
+  lobby      // Main lobby/entrance
+  meeting_room // Meeting/conference room
+  office     // Office space
+  storage    // Storage area
+  lab        // Laboratory/testing area
+  tech_room  // Technical/server room
+  parking    // Parking area
+  workshop   // Workshop/maintenance area
+}
+
+
+
+// --- DANH MỤC (MASTER DATA) ---
+
+// Supplier - stores supplier information for assets
+model Supplier {
+  id                String                 @id @default(uuid())
+  name              String                 // Supplier company name
+  contact_person    String?                // Contact person name
+  phone             String?                // Contact phone number
+  email             String?                // Contact email
+  address           String?                // Supplier address
+  note              String?                // Additional notes
+  
+  // CUD fields
+  created_at        DateTime               @default(now())
+  updated_at        DateTime               @updatedAt
+  
+  // Supplier associations
+  assets            Asset[]                // Assets supplied by this supplier
+  maintenance_records MaintenanceRecord[]  // Maintenance records provided by this supplier
+
+  @@map("supplier")
+}
+
+// Category - asset classification
+model Category {
+  id        String   @id @default(uuid())
+  name      String   // Category name (e.g., Computers, Furniture, etc.)
+  code      String   @unique // Unique category code (e.g., CAT-001)
+  
+  // CUD fields
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+  
+  // Category associations
+  assets    Asset[]  // Assets in this category
+
+  @@map("category")
+}
+
+// Department - organizational structure
+model Department {
+  id        String     @id @default(uuid())
+  name      String     // Department name
+  code      String     @unique // Unique department code (e.g., IT, HR, etc.)
+  
+  // CUD fields
+  created_at DateTime   @default(now())
+  updated_at DateTime   @updatedAt
+  
+  // Department associations
+  employees Employee[] // Employees in this department
+
+  @@map("department")
+}
+
+// Location - building/office locations
+model Location {
+  id        String        @id @default(uuid())
+  floor     String?       // Floor number/identifier (e.g., 1, 2, 3, B1, etc.)
+  room_name String?       // Room name (e.g., Conference Room A, Storage Room, etc.)
+  type      LocationType? // Location type classification
+  
+  // CUD fields
+  created_at DateTime      @default(now())
+  updated_at DateTime      @updatedAt
+  
+  // Location associations
+  assets    Asset[]       // Assets located here
+
+  @@map("location")
+}
+
+
+// --- CÁC BẢNG CHÍNH ---
+
+// Employee - employee records and information
+model Employee {
+  id                    String            @id @default(uuid())
+  employee_code         String            @unique // Unique employee identifier
+  full_name             String            // Employee's full name
+  position              String?           // Job title/position
+  phone                 String?           // Contact phone number
+  email                 String?           // Contact email
+  gender                Gender?           // Gender (MALE, FEMALE, OTHER)
+  
+  // CUD fields
+  created_at            DateTime          @default(now())
+  updated_at            DateTime          @updatedAt
+  
+  // Department association
+  department_id         String            // Associated department
+  department            Department        @relation(fields: [department_id], references: [id])
+  
+  // Status
+  status                EmployeeStatus    @default(active) // Employment status
+  
+  // Employee associations
+  account               Account?          // System login account (optional)
+  assigned_assets       Asset[]           // Assets assigned to this employee
+  asset_history_from    AssetHistory[]    @relation("from_employee") // Asset transfers from this employee
+  asset_history_to      AssetHistory[]    @relation("to_employee") // Asset transfers to this employee
+
+  @@index([department_id])
+  @@map("employee")
+}
+
+// Account - system user authentication
+model Account {
+  id            String        @id @default(uuid())
+  username      String        @unique // Login username
+  password_hash String        // Hashed password
+  
+  // CUD fields
+  created_at    DateTime      @default(now())
+  updated_at    DateTime      @updatedAt
+  
+  // Role and employee association
+  role          AccountRole   @default(user) // User role/permission level
+  employee_id   String        @unique // Associated employee
+  employee      Employee      @relation(fields: [employee_id], references: [id], onDelete: Cascade)
+
+  // Refresh tokens
+  refresh_tokens RefreshToken[] // One account can have multiple refresh tokens (multi-device)
+
+  @@map("account")
+}
+
+// RefreshToken - stores refresh tokens for authentication
+model RefreshToken {
+  id          String   @id @default(uuid())
+  token       String   @unique // The refresh token string
+  account_id  String   // Owner of the token
+  account     Account  @relation(fields: [account_id], references: [id], onDelete: Cascade)
+  expires_at  DateTime // Expiration time
+  created_at  DateTime @default(now())
+
+  @@index([account_id])
+  @@map("refresh_token")
+}
+
+// Asset - company assets/equipment
+model Asset {
+  id                    String           @id @default(uuid())
+  asset_code            String           @unique // Unique asset identifier
+  name                  String           // Asset name/description
+  model                 String?          // Model/version information
+  serial_number         String?          // Manufacturer serial number
+  
+  // Asset details
+  purchase_price        Float?           // Original purchase price
+  purchase_date         DateTime?        // Date of purchase
+  warranty_expiry_date  DateTime?        // Warranty expiration date
+  image_url             String?          // Asset photo URL
+  current_note          String?          // Current status notes
+  
+  // CUD fields
+  created_at            DateTime         @default(now())
+  updated_at            DateTime         @updatedAt
+  
+  // Asset classification
+  category_id           String           // Asset category
+  category              Category         @relation(fields: [category_id], references: [id])
+  status                AssetStatus      @default(active) // Current operational status
+  
+  // Asset location and assignment
+  location_id           String?          // Current location
+  location              Location?        @relation(fields: [location_id], references: [id])
+  assigned_employee_id  String?          // Currently assigned employee
+  assigned_employee     Employee?        @relation(fields: [assigned_employee_id], references: [id])
+  
+  // Asset supplier association
+  supplier_id           String?          // Supplier of this asset
+  supplier              Supplier?        @relation(fields: [supplier_id], references: [id])
+  
+  // Asset associations
+  maintenance_records   MaintenanceRecord[] // Maintenance history
+  asset_history         AssetHistory[]     // Asset transfer and status history
+
+  @@index([category_id])
+  @@index([supplier_id])
+  @@index([location_id])
+  @@index([assigned_employee_id])
+  @@map("asset")
+}
+
+// --- CÁC BẢNG LOG & CHI PHÍ ---
+
+// MaintenanceRecord - asset maintenance and repair history
+model MaintenanceRecord {
+  id                String            @id @default(uuid())
+  maintenance_date  DateTime          // Date of maintenance activity
+  type              MaintenanceType   // Type of maintenance (repair, maintenance, inspection)
+  cost              Float?            // Cost of maintenance
+  details           String?           // Detailed description of work performed
+  
+  // CUD fields
+  created_at        DateTime          @default(now())
+  updated_at        DateTime          @updatedAt
+  
+  // Maintenance associations
+  asset_id          String            // Asset being maintained
+  asset             Asset             @relation(fields: [asset_id], references: [id], onDelete: Cascade)
+  supplier_id       String?           // Service provider/supplier
+  supplier          Supplier?         @relation(fields: [supplier_id], references: [id])
+
+  @@index([asset_id])
+  @@index([supplier_id])
+  @@map("maintenance_record")
+}
+
+// AssetHistory - asset transfer and status change log
+model AssetHistory {
+  id              String     @id @default(uuid())
+  action_type     ActionType // Type of action (created, assigned, transferred, repaired, disposed)
+  action_date     DateTime   @default(now()) // Date of action
+  description     String?    // Additional action details
+  
+  // CUD fields
+  created_at      DateTime   @default(now())
+  
+  // Asset history associations
+  asset_id        String     // Asset involved
+  asset           Asset      @relation(fields: [asset_id], references: [id], onDelete: Cascade)
+  from_employee_id String?   // Transfer source employee
+  from_employee   Employee?  @relation("from_employee", fields: [from_employee_id], references: [id])
+  to_employee_id  String?    // Transfer destination employee
+  to_employee     Employee?  @relation("to_employee", fields: [to_employee_id], references: [id])
+
+  @@index([asset_id])
+  @@index([from_employee_id])
+  @@index([to_employee_id])
+  @@map("asset_history")
+}
