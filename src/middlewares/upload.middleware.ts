@@ -14,6 +14,8 @@ const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     // Get folder from query parameter or determine from field name
     let folder = (req.query.folder as string) || "";
+    // Sanitize folder input to prevent path traversal
+    folder = folder.replace(/(\.\.[\/\\]|[\\\/])/g, "");
 
     // If no folder in query, determine from field name
     if (!folder) {
